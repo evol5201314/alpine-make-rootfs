@@ -47,18 +47,8 @@ jobs:
             --timezone "${{ github.event.inputs.timezone }}" \
             --script-chroot \
             alpine-rootfs-${{ github.run_number }}.tar.gz - <<'SHELL'
-              # 设置 root 密码为 "passwd"（请按需修改）
-              echo 'root:passwd' | chpasswd
-
-              # 启用 SSH 服务并设置开机自启
               rc-update add sshd default
-
-              # 允许 root 通过 SSH 登录（密码方式）
               sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-              # 确保密码认证开启（默认就是 yes，以防万一）
-              sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-
-              # 安装 Python 包（示例）
               pip3 install --no-cache-dir --break-system-packages requests
           SHELL
 
