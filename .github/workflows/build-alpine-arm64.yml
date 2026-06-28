@@ -1,4 +1,4 @@
-name: Build Alpine Rootfs with SSH and Python (Alpine container)
+name: Build Alpine Rootfs with SSH and Python (ARM64 Runner)
 
 on:
   workflow_dispatch:
@@ -19,15 +19,18 @@ on:
         default: ''
         type: string
 
+permissions:
+  contents: write
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm   # 🔥 关键改动：使用 ARM64 原生运行器
     container:
-      image: alpine:latest
+      image: alpine:latest      # 自动拉取 ARM64 版本的 Alpine 镜像
       options: --privileged
 
     steps:
-      - name: 安装必要工具和 alpine-make-rootfs
+      - name: 安装必要工具
         run: |
           apk update
           apk add \
@@ -38,21 +41,40 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 构建 Rootfs（预装 SSH + Python）
+      - name: 配置 Git 安全目录
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: 清理工作目录（全新环境）
+        run: git clean -fdx
+
+      - name: 构建 Rootfs（预装 SSH + Python + 必备工具）
         run: |
           alpine-make-rootfs \
             --branch "${{ github.event.inputs.branch }}" \
-            --arch aarch64 \
-            --packages "openrc openssh python3 py3-pip ${{ github.event.inputs.extra_packages }}" \
+            --packages "openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}" \
             --timezone "${{ github.event.inputs.timezone }}" \
             --script-chroot \
             alpine-rootfs-${{ github.run_number }}.tar.gz - <<'SHELL'
+              echo 'root:passwd' | chpasswd
               rc-update add sshd default
               sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+              sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
               pip3 install --no-cache-dir --break-system-packages requests
           SHELL
 
-      - name: 上传构建产物
+      - name: 上传到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "Build ${{ github.run_number }}"
+          files: alpine-rootfs-*.tar.gz
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传构建产物（Artifact 备份）
         uses: actions/upload-artifact@v4
         with:
           name: alpine-rootfs
