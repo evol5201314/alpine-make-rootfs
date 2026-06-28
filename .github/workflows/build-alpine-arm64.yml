@@ -1,4 +1,4 @@
-name: Build Alpine Rootfs with SSH and Python
+name: Build Alpine Rootfs with SSH and Python (Alpine container)
 
 on:
   workflow_dispatch:
@@ -22,31 +22,35 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 使用 Alpine 官方容器作为运行环境，无需依赖宿主机的 apk
+    container:
+      image: alpine:latest
 
     steps:
+      - name: 安装必要工具和 alpine-make-rootfs
+        run: |
+          apk update
+          apk add \
+            alpine-make-rootfs \
+            openssh python3 py3-pip \
+            bash curl tar gzip xz git \
+            # 可选：添加更多构建时需要的工具
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 下载 alpine-make-rootfs 脚本
-        run: |
-          wget https://raw.githubusercontent.com/alpinelinux/alpine-make-rootfs/v0.8.1/alpine-make-rootfs
-          echo '2b21327244d2d63082dd4780e22549221e298206 alpine-make-rootfs' | sha1sum -c || exit 1
-          chmod +x alpine-make-rootfs
-
       - name: 构建 Rootfs（预装 SSH + Python）
         run: |
-          sudo ./alpine-make-rootfs \
-            --branch ${{ github.event.inputs.branch }} \
-            --packages 'openssh python3 py3-pip ${{ github.event.inputs.extra_packages }}' \
-            --timezone '${{ github.event.inputs.timezone }}' \
+          alpine-make-rootfs \
+            --branch "${{ github.event.inputs.branch }}" \
+            --packages "openssh python3 py3-pip ${{ github.event.inputs.extra_packages }}" \
+            --timezone "${{ github.event.inputs.timezone }}" \
             --script-chroot \
             alpine-rootfs-${{ github.run_number }}.tar.gz - <<'SHELL'
-              # 开启 SSH 服务（容器内启用）
+              # 在 chroot 环境内执行的脚本
               rc-update add sshd default
-              # 允许 root 登录（可选，根据需求调整）
               sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-              # 安装 Python 包（示例）
               pip3 install --no-cache-dir requests
+              # 可根据需要添加更多初始化命令
           SHELL
 
       - name: 上传构建产物
