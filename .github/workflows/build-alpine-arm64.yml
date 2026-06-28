@@ -24,31 +24,30 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm   # ARM64 原生运行器
+    runs-on: ubuntu-24.04-arm
 
     steps:
       - name: 安装依赖并下载脚本
         run: |
           sudo apt-get update
           sudo apt-get install -y wget
-          # 下载最新版 alpine-make-rootfs（支持 --timezone 等）
           wget https://raw.githubusercontent.com/alpinelinux/alpine-make-rootfs/master/alpine-make-rootfs
           chmod +x alpine-make-rootfs
 
       - name: 下载 ARM64 版本的 apk.static
         run: |
-          # 使用与 Alpine 3.20 匹配的 apk-tools 版本（v2.14.10）
           wget -O apk.static https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v2.14.10/aarch64/apk.static
           chmod +x apk.static
 
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 构建 Rootfs（预装 SSH + Python + 必备工具）
+      - name: 构建 Rootfs
         run: |
-          # 让脚本使用我们下载的 apk.static
-          export APK=$(pwd)/apk.static
-          sudo -E ./alpine-make-rootfs \
+          # 获取 apk.static 的绝对路径
+          APK_PATH=$(pwd)/apk.static
+          # 使用 sudo 并明确传递 APK 环境变量
+          sudo APK="$APK_PATH" ./alpine-make-rootfs \
             --branch "${{ github.event.inputs.branch }}" \
             --packages "openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}" \
             --timezone "${{ github.event.inputs.timezone }}" \
@@ -68,8 +67,6 @@ jobs:
           name: "Build ${{ github.run_number }}"
           files: alpine-rootfs-*.tar.gz
           generate_release_notes: true
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
