@@ -1,4 +1,4 @@
-name: Build Alpine Rootfs with SSH and Python (ARM64 Runner)
+name: Build Alpine Rootfs with SSH and Python (ARM64 Native)
 
 on:
   workflow_dispatch:
@@ -24,33 +24,26 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm   # 🔥 关键改动：使用 ARM64 原生运行器
-    container:
-      image: alpine:latest      # 自动拉取 ARM64 版本的 Alpine 镜像
-      options: --privileged
+    runs-on: ubuntu-24.04-arm   # ARM64 原生运行器
+    # ❌ 删除 container: 部分，直接在 Ubuntu 环境中执行
 
     steps:
-      - name: 安装必要工具
+      - name: 安装依赖（在 Ubuntu 中安装 Alpine 工具）
         run: |
-          apk update
-          apk add \
-            alpine-make-rootfs \
-            openssh python3 py3-pip \
-            bash curl tar gzip xz git
+          sudo apt-get update
+          sudo apt-get install -y wget
+          # 下载支持 --arch 的 alpine-make-rootfs 脚本
+          wget https://raw.githubusercontent.com/alpinelinux/alpine-make-rootfs/master/alpine-make-rootfs
+          chmod +x alpine-make-rootfs
 
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4   # ✅ 现在可以正常工作了
 
-      - name: 配置 Git 安全目录
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - name: 清理工作目录（全新环境）
-        run: git clean -fdx
-
-      - name: 构建 Rootfs（预装 SSH + Python + 必备工具）
+      - name: 构建 Rootfs
         run: |
-          alpine-make-rootfs \
+          sudo ./alpine-make-rootfs \
             --branch "${{ github.event.inputs.branch }}" \
+            --arch aarch64 \
             --packages "openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}" \
             --timezone "${{ github.event.inputs.timezone }}" \
             --script-chroot \
@@ -69,8 +62,6 @@ jobs:
           name: "Build ${{ github.run_number }}"
           files: alpine-rootfs-*.tar.gz
           generate_release_notes: true
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
