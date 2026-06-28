@@ -1,0 +1,45 @@
+name: Build Alpine ARM64 LXC SSH Image
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup QEMU for aarch64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Install build dependencies
+        run: sudo apt update && sudo apt install -y tar gzip curl wget qemu-user-static xz-utils
+
+      - name: Download official alpine-make-rootfs
+        run: |
+          curl -LO https://raw.githubusercontent.com/alpinelinux/alpine-make-rootfs/v0.6.0/alpine-make-rootfs
+          chmod +x alpine-make-rootfs
+
+      - name: Generate custom post-install script
+        run: |
+          echo '#!/bin/sh' > customize.sh
+          echo 'ssh-keygen -A' >> customize.sh
+          echo 'sed -i "s/#PermitRootLogin prohibit-password/PermitRootLogin yes/" /etc/ssh/sshd_config' >> customize.sh
+          echo 'echo "root:123456" | chpasswd' >> customize.sh
+          echo 'rc-update add sshd default' >> customize.sh
+          echo 'rm -rf /var/cache/apk/*' >> customize.sh
+          chmod +x customize.sh
+
+      - name: Build aarch64 rootfs tarball
+        run: |
+          sudo ./alpine-make-rootfs \
+            --arch aarch64 \
+            --version 3.23 \
+            --packages openssh bash curl tzdata \
+            --script customize.sh \
+            alpine-3.23-arm64-ssh.tar.gz
+
+      - name: Upload built rootfs
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpine-arm64-lxc-ssh-rootfs
+          path: alpine-3.23-arm64-ssh.tar.gz
