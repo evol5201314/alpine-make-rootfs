@@ -34,20 +34,15 @@ jobs:
           wget https://raw.githubusercontent.com/alpinelinux/alpine-make-rootfs/master/alpine-make-rootfs
           chmod +x alpine-make-rootfs
 
-      - name: 下载 ARM64 版本的 apk.static
-        run: |
-          wget -O apk.static https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v2.14.10/aarch64/apk.static
-          chmod +x apk.static
-
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 构建 Rootfs
+      - name: 构建 Rootfs（通过 APK_TOOLS_URI 指定 ARM64 的 apk.static）
         run: |
-          # 获取 apk.static 的绝对路径
-          APK_PATH=$(pwd)/apk.static
-          # 使用 sudo 并明确传递 APK 环境变量
-          sudo APK="$APK_PATH" ./alpine-make-rootfs \
+          # 设置 APK_TOOLS_URI 指向 ARM64 的 apk.static
+          export APK_TOOLS_URI="https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v2.14.10/aarch64/apk.static"
+          # 使用 sudo 并保留环境变量
+          sudo --preserve-env=APK_TOOLS_URI ./alpine-make-rootfs \
             --branch "${{ github.event.inputs.branch }}" \
             --packages "openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}" \
             --timezone "${{ github.event.inputs.timezone }}" \
