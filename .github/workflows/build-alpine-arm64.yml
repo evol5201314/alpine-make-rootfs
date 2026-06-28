@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: alpine:latest
-      options: --privileged   # 允许执行 mount 等操作
+      options: --privileged   # 允许 mount 操作
 
     steps:
       - name: 安装必要工具和 alpine-make-rootfs
@@ -48,11 +48,10 @@ jobs:
             alpine-rootfs-${{ github.run_number }}.tar.gz - <<'SHELL'
               # 在 chroot 环境内执行的脚本
               rc-update add sshd default
-              # 允许 root 登录（可选）
               sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-              # 安装 Python 包示例
-              pip3 install --no-cache-dir requests
-              # 可在此添加其他初始化命令
+              # 安装 Python 包，使用 --break-system-packages 绕过 PEP 668 限制
+              pip3 install --no-cache-dir --break-system-packages requests
+              # 如需安装更多包，可继续添加
           SHELL
 
       - name: 上传构建产物
