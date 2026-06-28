@@ -30,7 +30,6 @@ jobs:
       options: --privileged
 
     steps:
-      # 安装构建环境依赖（这些工具也便于构建过程中使用）
       - name: 安装必要工具
         run: |
           apk update
@@ -41,6 +40,10 @@ jobs:
 
       - name: 检出代码
         uses: actions/checkout@v4
+
+      # 修复 Git 所有权问题，允许安全地执行 git clean
+      - name: 配置 Git 安全目录
+        run: git config --global --add safe.directory /__w/alpine-make-rootfs/alpine-make-rootfs
 
       - name: 清理工作目录（全新环境）
         run: git clean -fdx
@@ -54,12 +57,10 @@ jobs:
             --timezone "${{ github.event.inputs.timezone }}" \
             --script-chroot \
             alpine-rootfs-${{ github.run_number }}.tar.gz - <<'SHELL'
-              # 设置 root 密码（默认为 passwd）
               echo 'root:passwd' | chpasswd
               rc-update add sshd default
               sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
               sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-              # 预装 Python 网络请求库（监控脚本必备）
               pip3 install --no-cache-dir --break-system-packages requests
           SHELL
 
