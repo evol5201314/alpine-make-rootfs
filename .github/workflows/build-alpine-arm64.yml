@@ -1,30 +1,33 @@
 name: 手动构建Alpine ARM64 LXC镜像（预装SSH+Python）
 on:
-  workflow_dispatch # 仅手动点击运行，无自动触发
-
+  workflow_dispatch
+env:
+  ACTIONS_RUNNER_FORCE_NODE_VERSION: 24
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 清空工作区，杜绝上次构建残留混入镜像
-      - name: 清理全部旧文件
+      # 前置清空工作区，杜绝上次构建残留混入镜像
+      - name: 清理全部历史文件
         run: rm -rf ./*
 
-      - name: 加载aarch64交叉编译QEMU
-        uses: docker/setup-qemu-action@v3
+      # QEMU升级v4，消除Node20废弃警告
+      - name: 加载aarch64交叉编译环境
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
 
-      - name: 安装宿主机依赖
+      # 安装宿主机构建依赖
+      - name: 安装工具链
         run: sudo apt update && sudo apt install -y tar gzip curl wget qemu-user-static xz-utils
 
-      # 下载修复哈希bug的v0.7.0版本脚本
-      - name: 下载alpine-make-rootfs v0.7.0
+      # 下载修复哈希bug的v0.7.0构建脚本
+      - name: 获取alpine-make-rootfs v0.7.0
         run: |
           curl -LO https://raw.githubusercontent.com/alpinelinux/alpine-make-rootfs/v0.7.0/alpine-make-rootfs
           chmod +x alpine-make-rootfs
 
-      # 后置配置脚本：SSH、Python、双层缓存清理
+      # 后置配置脚本：SSH放行、Python预装、双重缓存清理
       - name: 生成install.sh配置脚本
         run: |
           echo '#!/bin/sh' > install.sh
@@ -37,8 +40,8 @@ jobs:
           echo 'rm -rf /var/cache/apk/*' >> install.sh
           chmod +x install.sh
 
-      # 构建ARM64离线rootfs
-      - name: 构建镜像包
+      # 构建ARM64离线rootfs包
+      - name: 构建镜像
         run: |
           sudo ./alpine-make-rootfs \
             --branch v3.23 \
@@ -47,7 +50,8 @@ jobs:
             --script-chroot \
             alpine-v3.23-arm64-ssh-python.tar.gz -- ./install.sh
 
-      - name: 上传成品离线包
+      # 上传成品离线镜像
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: LXC离线镜像-预装SSH-Python
