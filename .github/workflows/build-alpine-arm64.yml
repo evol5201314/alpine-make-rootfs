@@ -30,12 +30,14 @@ jobs:
       options: --privileged
 
     steps:
-      - name: 安装必要工具（仅用于构建环境）
+      # 安装构建环境依赖（这些工具也便于构建过程中使用）
+      - name: 安装必要工具
         run: |
           apk update
           apk add \
             alpine-make-rootfs \
-            bash curl tar gzip xz git   # 这些是构建时需要用的，不是目标 rootfs 里的
+            openssh python3 py3-pip \
+            bash curl tar gzip xz git
 
       - name: 检出代码
         uses: actions/checkout@v4
@@ -43,21 +45,21 @@ jobs:
       - name: 清理工作目录（全新环境）
         run: git clean -fdx
 
-      - name: 构建 Rootfs（预装 SSH + Python + 工具）
+      - name: 构建 Rootfs（预装 SSH + Python + 必备工具）
         run: |
           alpine-make-rootfs \
             --branch "${{ github.event.inputs.branch }}" \
             --arch aarch64 \
-            --packages "openrc openssh bash curl tzdata python3 py3-pip ${{ github.event.inputs.extra_packages }}" \
+            --packages "openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}" \
             --timezone "${{ github.event.inputs.timezone }}" \
             --script-chroot \
             alpine-rootfs-${{ github.run_number }}.tar.gz - <<'SHELL'
-              # 设置 root 密码（默认为 passwd，可自行修改）
+              # 设置 root 密码（默认为 passwd）
               echo 'root:passwd' | chpasswd
               rc-update add sshd default
               sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
               sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-              # 安装 Python 包（requests）
+              # 预装 Python 网络请求库（监控脚本必备）
               pip3 install --no-cache-dir --break-system-packages requests
           SHELL
 
