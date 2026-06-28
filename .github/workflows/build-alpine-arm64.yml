@@ -2,14 +2,12 @@ name: 手动构建Alpine ARM64 LXC镜像
 on:
   workflow_dispatch
 env:
-  # 强制使用系统自带apk，跳过下载静态apk-tools逻辑，彻底解决哈希校验报错
-  APK: apk
   ACTIONS_RUNNER_FORCE_NODE_VERSION: 24
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 清空工作区，隔绝上次构建残留
+      # 清空工作目录，清除上次构建残留
       - name: 清理全部旧文件
         run: rm -rf ./*
 
@@ -19,19 +17,29 @@ jobs:
         with:
           platforms: arm64
 
-      # 安装宿主机完整依赖，提供apk二进制
-      - name: 安装系统构建工具
+      # 仅安装基础构建工具，不再安装不存在的apk-tools
+      - name: 安装系统依赖
         run: |
           sudo apt update -y
-          sudo apt install -y tar gzip curl wget qemu-user-static xz-utils apk-tools
+          sudo apt install -y tar gzip curl wget qemu-user-static xz-utils jq
 
-      # 下载官方v0.7.0稳定脚本
+      # 下载v0.7.0修复版脚本
       - name: 下载alpine-make-rootfs v0.7.0
         run: |
           curl -LO https://raw.githubusercontent.com/alpinelinux/alpine-make-rootfs/v0.7.0/alpine-make-rootfs
           chmod +x alpine-make-rootfs
 
-      # 后置配置脚本：SSH、Python、双重缓存清理
+      # 自动拉取GitLab最新apk-tools，实时计算真实URI与SHA256，覆盖脚本内置失效值
+      - name: 获取最新apk-tools校验信息
+        run: |
+          RELEASE=$(curl -s https://gitlab.alpinelinux.org/api/v4/projects/alpine%2Fapk-tools/releases/latest)
+          TOOL_URL=$(echo "$RELEASE" | jq -r '.assets[] | select(.name | endswith("x86_64.tar.gz")) | .direct_asset_url')
+          curl -L -o apk-tmp.tar.gz "$TOOL_URL"
+          REAL_SHA=$(sha256sum apk-tmp.tar.gz | awk '{print $1}')
+          echo "APK_TOOLS_URI=$TOOL_URL" >> $GITHUB_ENV
+          echo "APK_TOOLS_SHA256=$REAL_SHA" >> $GITHUB_ENV
+
+      # 生成预装SSH+Python+requests的后置脚本，双层缓存清理
       - name: 生成install.sh配置脚本
         run: |
           echo '#!/bin/sh' > install.sh
@@ -44,8 +52,11 @@ jobs:
           echo 'rm -rf /var/cache/apk/*' >> install.sh
           chmod +x install.sh
 
-      # 构建ARM64离线镜像
-      - name: 打包rootfs
+      # 传入环境变量覆盖内置哈希，完整执行校验，不跳过任何校验逻辑
+      - name: 构建ARM64离线rootfs镜像
+        env:
+          APK_TOOLS_URI: ${{ env.APK_TOOLS_URI }}
+          APK_TOOLS_SHA256: ${{ env.APK_TOOLS_SHA256 }}
         run: |
           sudo ./alpine-make-rootfs \
             --branch v3.23 \
@@ -54,7 +65,7 @@ jobs:
             --script-chroot \
             alpine-v3.23-arm64-ssh-python.tar.gz -- ./install.sh
 
-      # 上传成品离线包
+      # 上传成品离线镜像包
       - name: 上传镜像产物
         uses: actions/upload-artifact@v4
         with:
