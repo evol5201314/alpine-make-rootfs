@@ -30,27 +30,32 @@ jobs:
       options: --privileged
 
     steps:
+      # 安装构建环境依赖（工具本身）
       - name: 安装必要工具
         run: |
           apk update
           apk add \
-            alpine-make-rootfs \
             openssh python3 py3-pip \
             bash curl tar gzip xz git
+
+      # 下载最新的 alpine-make-rootfs（支持 --arch）
+      - name: 下载 alpine-make-rootfs 脚本
+        run: |
+          wget https://raw.githubusercontent.com/alpinelinux/alpine-make-rootfs/master/alpine-make-rootfs
+          chmod +x alpine-make-rootfs
 
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # 修复 Git 所有权问题，允许安全地执行 git clean
       - name: 配置 Git 安全目录
-        run: git config --global --add safe.directory /__w/alpine-make-rootfs/alpine-make-rootfs
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: 清理工作目录（全新环境）
         run: git clean -fdx
 
       - name: 构建 Rootfs（预装 SSH + Python + 必备工具）
         run: |
-          alpine-make-rootfs \
+          ./alpine-make-rootfs \
             --branch "${{ github.event.inputs.branch }}" \
             --arch aarch64 \
             --packages "openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}" \
