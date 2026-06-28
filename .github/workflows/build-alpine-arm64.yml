@@ -1,4 +1,4 @@
-name: Build Alpine Rootfs for ARM64 (Native)
+name: Build Alpine Rootfs for ARM64 (QEMU Emulation)
 
 on:
   workflow_dispatch:
@@ -24,35 +24,35 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest   # 使用 x86_64 运行器
 
     steps:
-      - name: 安装依赖并下载 alpine-make-rootfs
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget apk-tools-static
-          wget https://raw.githubusercontent.com/alpinelinux/alpine-make-rootfs/master/alpine-make-rootfs
-          chmod +x alpine-make-rootfs
+      - name: 安装 QEMU 模拟器（支持 ARM64）
+        uses: docker/setup-qemu-action@v4
 
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 构建 Rootfs（预装 SSH + Python + 必备工具）
+      - name: 在 ARM64 Alpine 容器中构建
         run: |
-          # 指定使用系统安装的 apk（来自 apk-tools-static）
-          export APK=$(which apk)
-          sudo --preserve-env=APK ./alpine-make-rootfs \
-            --branch "${{ github.event.inputs.branch }}" \
-            --packages "openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}" \
-            --timezone "${{ github.event.inputs.timezone }}" \
-            --script-chroot \
-            alpine-rootfs-${{ github.run_number }}.tar.gz - <<'SHELL'
-              echo 'root:passwd' | chpasswd
-              rc-update add sshd default
-              sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-              sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-              pip3 install --no-cache-dir --break-system-packages requests
-          SHELL
+          docker run --rm --privileged --platform linux/arm64 \
+            -v $(pwd):/workspace -w /workspace \
+            alpine:latest sh -c "
+              apk update
+              apk add alpine-make-rootfs openssh python3 py3-pip bash curl tzdata
+              alpine-make-rootfs \
+                --branch '${{ github.event.inputs.branch }}' \
+                --packages 'openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}' \
+                --timezone '${{ github.event.inputs.timezone }}' \
+                --script-chroot \
+                alpine-rootfs-${{ github.run_number }}.tar.gz - <<'SHELL'
+                  echo 'root:passwd' | chpasswd
+                  rc-update add sshd default
+                  sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+                  sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+                  pip3 install --no-cache-dir --break-system-packages requests
+              SHELL
+            "
 
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
