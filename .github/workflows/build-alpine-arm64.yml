@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: alpine:latest
-      options: --privileged   # 🚀 关键：允许容器执行 mount 操作
+      options: --privileged   # 允许执行 mount 等操作
 
     steps:
       - name: 安装必要工具和 alpine-make-rootfs
@@ -42,15 +42,17 @@ jobs:
         run: |
           alpine-make-rootfs \
             --branch "${{ github.event.inputs.branch }}" \
-            --packages "openssh python3 py3-pip ${{ github.event.inputs.extra_packages }}" \
+            --packages "openrc openssh python3 py3-pip ${{ github.event.inputs.extra_packages }}" \
             --timezone "${{ github.event.inputs.timezone }}" \
             --script-chroot \
             alpine-rootfs-${{ github.run_number }}.tar.gz - <<'SHELL'
               # 在 chroot 环境内执行的脚本
               rc-update add sshd default
+              # 允许 root 登录（可选）
               sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+              # 安装 Python 包示例
               pip3 install --no-cache-dir requests
-              # 你可以在此添加更多初始化命令
+              # 可在此添加其他初始化命令
           SHELL
 
       - name: 上传构建产物
