@@ -24,27 +24,24 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm   # ✅ ARM64 原生运行器
+    runs-on: ubuntu-24.04-arm
 
     steps:
-      - name: 安装依赖并修改脚本跳过校验
+      - name: 安装依赖并下载 alpine-make-rootfs
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget
+          sudo apt-get install -y wget apk-tools-static
           wget https://raw.githubusercontent.com/alpinelinux/alpine-make-rootfs/master/alpine-make-rootfs
           chmod +x alpine-make-rootfs
-          # 注释掉 sha256sum 校验行，彻底跳过
-          sed -i 's/^[[:space:]]*echo "\$APK_TOOLS_SHA256/ # &/' alpine-make-rootfs
-          sed -i 's/^[[:space:]]*sha256sum -c/ # &/' alpine-make-rootfs
 
       - name: 检出代码
         uses: actions/checkout@v4
 
       - name: 构建 Rootfs（预装 SSH + Python + 必备工具）
         run: |
-          # 使用 ARM64 的 apk.static
-          export APK_TOOLS_URI="https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v2.14.10/aarch64/apk.static"
-          sudo --preserve-env=APK_TOOLS_URI ./alpine-make-rootfs \
+          # 指定使用系统安装的 apk（来自 apk-tools-static）
+          export APK=$(which apk)
+          sudo --preserve-env=APK ./alpine-make-rootfs \
             --branch "${{ github.event.inputs.branch }}" \
             --packages "openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}" \
             --timezone "${{ github.event.inputs.timezone }}" \
