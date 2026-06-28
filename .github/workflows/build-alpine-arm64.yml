@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest   # 使用 x86_64 运行器
+    runs-on: ubuntu-latest
 
     steps:
       - name: 安装 QEMU 模拟器（支持 ARM64）
@@ -33,26 +33,36 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 在 ARM64 Alpine 容器中构建
+      - name: 创建构建脚本（避免 heredoc 解析问题）
+        run: |
+          cat > build.sh <<'EOF'
+          #!/bin/sh -e
+          apk update
+          apk add alpine-make-rootfs openssh python3 py3-pip bash curl tzdata
+          alpine-make-rootfs \
+            --branch "$BRANCH" \
+            --packages "openrc openssh python3 py3-pip bash curl tzdata $EXTRA_PACKAGES" \
+            --timezone "$TIMEZONE" \
+            --script-chroot \
+            /workspace/alpine-rootfs-$RUN_NUMBER.tar.gz - <<'INNER'
+              echo 'root:passwd' | chpasswd
+              rc-update add sshd default
+              sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+              sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+              pip3 install --no-cache-dir --break-system-packages requests
+          INNER
+          EOF
+          chmod +x build.sh
+
+      - name: 在 ARM64 Alpine 容器中执行构建
         run: |
           docker run --rm --privileged --platform linux/arm64 \
             -v $(pwd):/workspace -w /workspace \
-            alpine:latest sh -c "
-              apk update
-              apk add alpine-make-rootfs openssh python3 py3-pip bash curl tzdata
-              alpine-make-rootfs \
-                --branch '${{ github.event.inputs.branch }}' \
-                --packages 'openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}' \
-                --timezone '${{ github.event.inputs.timezone }}' \
-                --script-chroot \
-                alpine-rootfs-${{ github.run_number }}.tar.gz - <<'SHELL'
-                  echo 'root:passwd' | chpasswd
-                  rc-update add sshd default
-                  sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-                  sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-                  pip3 install --no-cache-dir --break-system-packages requests
-              SHELL
-            "
+            -e BRANCH="${{ github.event.inputs.branch }}" \
+            -e TIMEZONE="${{ github.event.inputs.timezone }}" \
+            -e EXTRA_PACKAGES="${{ github.event.inputs.extra_packages }}" \
+            -e RUN_NUMBER="${{ github.run_number }}" \
+            alpine:latest sh /workspace/build.sh
 
       - name: 上传到 Release
         uses: softprops/action-gh-release@v2
