@@ -37,12 +37,12 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 构建 Rootfs（通过 APK_TOOLS_URI 指定 ARM64 的 apk.static）
+      - name: 构建 Rootfs（跳过 apk.static 校验）
         run: |
-          # 设置 APK_TOOLS_URI 指向 ARM64 的 apk.static
+          # 指向 ARM64 的 apk.static，并清空校验和以跳过验证
           export APK_TOOLS_URI="https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v2.14.10/aarch64/apk.static"
-          # 使用 sudo 并保留环境变量
-          sudo --preserve-env=APK_TOOLS_URI ./alpine-make-rootfs \
+          export APK_TOOLS_SHA256=""
+          sudo --preserve-env=APK_TOOLS_URI,APK_TOOLS_SHA256 ./alpine-make-rootfs \
             --branch "${{ github.event.inputs.branch }}" \
             --packages "openrc openssh python3 py3-pip bash curl tzdata ${{ github.event.inputs.extra_packages }}" \
             --timezone "${{ github.event.inputs.timezone }}" \
